@@ -4,7 +4,7 @@ set -e
 set -o pipefail
 set -x
 
-SOCAT_VERSION=1.7.3.2
+SOCAT_VERSION=cc71013
 NCURSES_VERSION=6.0
 READLINE_VERSION=7.0
 OPENSSL_VERSION=1.1.0f
@@ -50,6 +50,14 @@ function build_openssl() {
     tar zxvf openssl-${OPENSSL_VERSION}.tar.gz
     cd openssl-${OPENSSL_VERSION}
 
+    sed -i "s#'File::Glob' => qw/glob/;#'File::Glob' => qw/bsd_glob/;#g" test/recipes/90-test_fuzz.t
+    sed -i "s#'File::Glob' => qw/glob/;#'File::Glob' => qw/bsd_glob/;#g" test/recipes/80-test_ssl_new.t
+    sed -i "s#'File::Glob' => qw/glob/;#'File::Glob' => qw/bsd_glob/;#g" test/recipes/40-test_rehash.t
+    sed -i "s#'File::Glob' => qw/glob/;#'File::Glob' => qw/bsd_glob/;#g" test/build.info
+    sed -i "s#'File::Glob' => qw/glob/;#'File::Glob' => qw/bsd_glob/;#g" test/run_tests.pl
+    sed -i "s#'File::Glob' => qw/glob/;#'File::Glob' => qw/bsd_glob/;#g" util/process_docs.pl
+    sed -i "s#'File::Glob' => qw/glob/;#'File::Glob' => qw/bsd_glob/;#g" Configure
+
     # Configure
     CC='/usr/bin/gcc -static' ./Configure no-shared no-async linux-x86_64
 
@@ -62,18 +70,23 @@ function build_socat() {
     cd /build
 
     # Download
-    curl -LO http://www.dest-unreach.org/socat/download/socat-${SOCAT_VERSION}.tar.gz
+    curl --output socat-${SOCAT_VERSION}.tar.gz -L https://github.com/runsisi/socat/tarball/${SOCAT_VERSION}
     tar xzvf socat-${SOCAT_VERSION}.tar.gz
+    mv runsisi-socat-${SOCAT_VERSION} socat-${SOCAT_VERSION}
+
     cd socat-${SOCAT_VERSION}
+
+    autoconf
 
     # Build
     # NOTE: `NETDB_INTERNAL` is non-POSIX, and thus not defined by MUSL.
     # We define it this way manually.
     CC='/usr/bin/gcc -static' \
-        CFLAGS='-fPIC' \
-        CPPFLAGS="-I/build -I/build/openssl-${OPENSSL_VERSION}/include -DNETDB_INTERNAL=-1" \
-        LDFLAGS="-L/build/readline-${READLINE_VERSION} -L/build/ncurses-${NCURSES_VERSION}/lib -L/build/openssl-${OPENSSL_VERSION}" \
+    CFLAGS='-fPIC' \
+    CPPFLAGS="-I/build -I/build/openssl-${OPENSSL_VERSION}/include -DNETDB_INTERNAL=-1" \
+    LDFLAGS="-L/build/readline-${READLINE_VERSION} -L/build/ncurses-${NCURSES_VERSION}/lib -L/build/openssl-${OPENSSL_VERSION}" \
         ./configure
+
     make -j4
     strip socat
 }
@@ -89,7 +102,7 @@ function doit() {
     then
         OUT_DIR=/output/`uname | tr 'A-Z' 'a-z'`/`uname -m`
         mkdir -p $OUT_DIR
-        cp /build/socat-${SOCAT_VERSION}/socat $OUT_DIR/
+	cp /build/socat-${SOCAT_VERSION}/socat $OUT_DIR/
         echo "** Finished **"
     else
         echo "** /output does not exist **"
